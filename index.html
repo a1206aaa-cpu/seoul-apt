@@ -3,6 +3,472 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>갈아타기 계산기</title>
+<meta name="description" content="내 집 팔고 얼마를 더 보태면 서울 500세대 이상 아파트로 갈아탈 수 있는지 실거래가로 비교">
+<style>
+  :root { --bg:#f6f6f3; --card:#fff; --text:#1d1d1f; --sub:#6b6b70; --line:#e4e4e0; --bar:#9db6e8; --dot:#1f4fb8;
+          --me:#e8590c; --ok:#1a7f4b; --okbg:rgba(26,127,75,.10); --over:#c2410c; --soft:#f0f0ec; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141416; --card:#1e1e21; --text:#ececef; --sub:#9a9aa2; --line:#2e2e33; --bar:#3a4f7a; --dot:#8fb0ff;
+            --me:#ff8a3d; --ok:#4cc38a; --okbg:rgba(76,195,138,.13); --over:#ff8f5a; --soft:#26262a; }
+  }
+  * { box-sizing:border-box; }
+  html, body { overflow-x:hidden; max-width:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 16px; }
+  header { padding:14px 0 6px; }
+  h1 { font-size:19px; margin:0; letter-spacing:-.3px; }
+  .meta { color:var(--sub); font-size:12px; margin-top:2px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; }
+  .me h2 { font-size:13px; color:var(--sub); font-weight:600; margin:0 0 8px; }
+  .home-name { font-weight:700; font-size:15px; }
+  .home-name.none { color:var(--sub); font-weight:400; font-size:13px; }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .fields label { font-size:12px; color:var(--sub); display:block; }
+  .num { display:flex; align-items:center; border:1px solid var(--line); border-radius:8px; background:var(--bg); margin-top:3px; }
+  .num input { border:0; background:none; flex:1; min-width:0; padding:8px; font:inherit; font-size:16px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .num input:focus { outline:none; }
+  .num span { padding-right:10px; color:var(--sub); }
+  .auto { font-size:11px; color:var(--sub); margin-top:2px; min-height:15px; }
+  .check { display:flex; align-items:center; gap:6px; font-size:13px; margin-top:10px; }
+  .check input { width:16px; height:16px; margin:0; }
+  .sum { margin-top:10px; padding:10px; border-radius:8px; background:var(--okbg); font-size:13px; }
+  .sum b { color:var(--ok); font-size:16px; }
+  .filters { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  select, .q { font:inherit; padding:7px 8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); }
+  .filters select { flex:1 1 30%; min-width:0; }
+  .q { flex:1 1 140px; min-width:0; }
+  .toggles { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:6px; }
+  .sticky { position:sticky; top:0; z-index:5; background:var(--bg); padding:8px 0 4px; border-bottom:1px solid var(--line); margin-top:8px; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--sub); }
+  .legend i { display:inline-block; width:14px; height:8px; border-radius:4px; background:var(--bar); vertical-align:middle; margin-right:4px; }
+  .legend b { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--dot); vertical-align:middle; margin-right:4px; }
+  .legend u { display:inline-block; width:0; height:10px; border-left:2px dashed var(--me); vertical-align:middle; margin-right:4px; }
+  .legend s { display:inline-block; width:14px; height:8px; background:var(--okbg); border-right:2px solid var(--ok); vertical-align:middle; margin-right:4px; }
+  .axis { position:relative; height:16px; margin:6px 10px 0; font-size:11px; color:var(--sub); }
+  .axis span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+  main { padding:8px 0 24px; }
+  .row { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:9px 10px; margin-bottom:6px; cursor:pointer; }
+  .row.home { border:2px solid var(--me); }
+  .top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto; }
+  .need { white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:700; flex:0 0 auto; }
+  .need small { font-weight:400; font-size:11px; margin-left:2px; }
+  .need.ok { color:var(--ok); } .need.over { color:var(--over); } .need.spare { color:var(--ok); } .need.plain { color:var(--text); }
+  .pin { flex:0 0 auto; border:0; background:none; color:var(--sub); font-size:16px; padding:0 0 0 4px; cursor:pointer; line-height:1.2; }
+  .row.home .pin { color:var(--me); }
+  .sub { color:var(--sub); font-size:12px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:0 8px; margin-top:1px; }
+  .sub span:last-child { white-space:nowrap; }
+  .track { position:relative; height:12px; margin-top:7px; border-radius:3px;
+           background:linear-gradient(to right, var(--line) 1px, transparent 1px) 0 0/10% 100%; }
+  .zone { position:absolute; top:0; bottom:0; left:0; background:var(--okbg); border-right:2px solid var(--ok); border-radius:3px 0 0 3px; }
+  .bar { position:absolute; top:2px; height:8px; background:var(--bar); border-radius:4px; min-width:4px; }
+  .dot { position:absolute; top:0; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--dot); border:2px solid var(--card); }
+  .ref { position:absolute; top:-3px; bottom:-3px; width:0; border-left:2px dashed var(--me); }
+  .badge { display:inline-block; font-size:11px; font-weight:700; color:#fff; background:var(--me); border-radius:6px; padding:1px 6px; margin-right:6px; vertical-align:1px; }
+  .det { margin-top:10px; border-top:1px solid var(--line); padding-top:10px; cursor:default; }
+  .calc { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  .calc td { padding:3px 0; }
+  .calc td:last-child { text-align:right; }
+  .calc tr.tot td { border-top:1px solid var(--line); font-weight:700; padding-top:6px; }
+  .calc .minus { color:var(--sub); }
+  .map { width:100%; height:220px; border:0; border-radius:8px; margin-top:10px; background:var(--soft); display:block; }
+  .addr { font-size:12px; color:var(--sub); margin-top:6px; }
+  .links { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+  .links a { flex:1 1 0; text-align:center; padding:7px; border:1px solid var(--line); border-radius:8px; color:var(--text); text-decoration:none; font-size:13px; background:var(--bg); }
+  .trades { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; font-variant-numeric:tabular-nums; }
+  .trades th { text-align:left; color:var(--sub); font-weight:400; border-bottom:1px solid var(--line); padding:3px 0; }
+  .trades td { padding:3px 0; border-bottom:1px solid var(--line); }
+  .trades th:last-child, .trades td:last-child { text-align:right; }
+  .trades tr.x td { color:var(--sub); text-decoration:line-through; }
+  .tag { font-size:10px; border:1px solid var(--line); border-radius:4px; padding:0 4px; margin-left:4px; text-decoration:none; display:inline-block; }
+  .more { display:block; width:100%; padding:10px; margin-top:8px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); font:inherit; cursor:pointer; }
+  .msg { color:var(--sub); padding:40px 0; text-align:center; }
+  .hint { color:var(--sub); font-size:12px; padding:4px 2px 8px; }
+  footer { color:var(--sub); font-size:11px; text-align:center; padding:8px 16px 32px; line-height:1.6; }
+  @media (max-width: 420px) {
+    .wrap { padding:0 12px; }
+    .row { padding:8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>얼마 더 있으면 갈아탈 수 있을까</h1>
+  <div class="meta" id="meta">불러오는 중…</div>
+</header>
+
+<section class="card me">
+  <h2>내 조건</h2>
+  <div id="homeName" class="home-name none">아래 목록에서 ☆를 눌러 내 집을 고르세요</div>
+  <div class="fields">
+    <div>
+      <label for="myVal">내 집 팔면 받을 돈</label>
+      <div class="num"><input id="myVal" inputmode="decimal" placeholder="자동"><span>억</span></div>
+      <div class="auto" id="myAuto"></div>
+    </div>
+    <div>
+      <label for="extra">더 보탤 수 있는 돈</label>
+      <div class="num"><input id="extra" inputmode="decimal" placeholder="예: 3"><span>억</span></div>
+      <div class="auto">현금 + 대출 가능액</div>
+    </div>
+  </div>
+  <label class="check"><input type="checkbox" id="costs" checked>취득세·중개보수까지 포함해서 계산 (추정)</label>
+  <div class="sum" id="sum" hidden></div>
+</section>
+
+<div class="filters">
+  <select id="area" aria-label="전용면적">
+    <option value="84" selected>전용 84㎡대</option>
+    <option value="59">전용 59㎡대</option>
+    <option value="74">전용 74㎡대</option>
+    <option value="small">50㎡ 미만</option>
+    <option value="large">90㎡ 초과</option>
+    <option value="all">전체 평형</option>
+  </select>
+  <select id="period" aria-label="기간">
+    <option value="3">최근 3개월</option>
+    <option value="6" selected>최근 6개월</option>
+    <option value="12">최근 12개월</option>
+  </select>
+  <select id="gu" aria-label="구"><option value="">서울 전체</option></select>
+  <select id="basis" aria-label="가격 기준">
+    <option value="recent" selected>시세 기준(최근 3건)</option>
+    <option value="min">최저가에 산다면</option>
+    <option value="last">마지막 거래가</option>
+  </select>
+  <select id="sort" aria-label="정렬">
+    <option value="need" selected>추가금 적은순</option>
+    <option value="fit">내 예산에 가까운순</option>
+    <option value="needDesc">추가금 많은순</option>
+    <option value="new">신축순</option>
+    <option value="hh">세대수순</option>
+    <option value="count">거래 많은순</option>
+  </select>
+  <input id="q" class="q" placeholder="단지명 검색" aria-label="단지명 검색">
+</div>
+<div class="toggles">
+  <label class="check"><input type="checkbox" id="clean" checked>직거래·튀는 가격 빼기</label>
+  <label class="check"><input type="checkbox" id="fitOnly">예산 안 단지만</label>
+</div>
+
+<div class="sticky">
+  <div class="legend"><span><i></i>최저~최고</span><span><b></b>기준가</span><span id="lgHome" hidden><u></u>내 집 가격</span><span id="lgZone" hidden><s></s>살 수 있는 범위</span></div>
+  <div class="axis" id="axis"></div>
+</div>
+<main id="list"><div class="msg">데이터를 불러오는 중…</div></main>
+</div>
+<footer>
+  자료: 국토교통부 실거래가 공개시스템·공공데이터포털, 공동주택관리정보시스템(K-apt). 500세대 이상 분양 단지, 해제 거래 제외.<br>
+  ‘튀는 가격’은 같은 단지·같은 면적의 앞뒤 4개월 거래 중간값보다 20% 이상 싸거나 25% 이상 비싼 거래입니다.<br>
+  취득세는 1주택(일시적 2주택 포함) 유상취득 세율, 중개보수는 서울시 상한요율(부가세 제외)로 추정한 값이에요. 대출 규제·양도세는 반영하지 않았어요.<br>
+  단지를 누르면 지도와 계산 내역이 열려요. ☆는 내 집 고정(이 기기에만 저장). 참고용이며 법적 효력이 없습니다.
+</footer>
+
+<script>
+  var DATA_URL = 'https://script.google.com/macros/s/AKfycbw1RKBE4bVOZeCfnTSqjx01pbYnEKRrAtVf41u0JBJOdpxm2F6ayUPEflRzBqG_EFDt/exec?format=json';
+  var CACHE_KEY = 'aptData.v2', HOME_KEY = 'aptHome.v1', PREF_KEY = 'aptPref.v1';
+  var C = [], T = [], SHOWN = 60, UPD = '', CUR = {}, CTX = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  try { localStorage.removeItem('aptData.v1'); } catch (e) {}
+
+  var HOME = (new URLSearchParams(location.search)).get('home') || load(HOME_KEY) || '';
+  var PREF = {}; try { PREF = JSON.parse(load(PREF_KEY) || '{}') || {}; } catch (e) { PREF = {}; }
+  if (PREF.myVal) $('myVal').value = PREF.myVal;
+  if (PREF.extra) $('extra').value = PREF.extra;
+  if (PREF.costs === false) $('costs').checked = false;
+  function savePref() { store(PREF_KEY, JSON.stringify({ myVal: $('myVal').value.trim(), extra: $('extra').value.trim(), costs: $('costs').checked })); }
+
+  // ---------- 숫자 표시 ----------
+  function eok(v) { // 만원 → "8.95억"
+    var e = Math.abs(v) / 10000;
+    return (e >= 10 ? e.toFixed(1) : e.toFixed(2)).replace(/\.?0+$/, '') + '억';
+  }
+  function money(v) { // 만원 → 1억 미만은 "8,500만"
+    var a = Math.abs(v);
+    if (a < 10000) return Math.round(a / 100) * 100 >= 10000 ? '1억' : (Math.round(a / 100) * 100).toLocaleString() + '만';
+    return eok(a);
+  }
+  function parseEok(s) { var n = parseFloat(String(s).replace(/[^0-9.]/g, '')); return isFinite(n) && n > 0 ? Math.round(n * 10000) : 0; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // ---------- 세금·중개보수 추정 (만원) ----------
+  function acqTax(p, area) {
+    var e = p / 10000, rate = e <= 6 ? 1 : e <= 9 ? (e * 2 / 3 - 3) : 3;
+    var tax = p * rate / 100;
+    return tax + tax * 0.1 + (area > 85 ? p * 0.002 : 0);       // 취득세 + 지방교육세 + 농특세(85㎡ 초과)
+  }
+  function brokerFee(p) {
+    var r = p < 5000 ? .006 : p < 20000 ? .005 : p < 90000 ? .004 : p < 120000 ? .005 : p < 150000 ? .006 : .007;
+    var f = p * r;
+    if (p < 5000) f = Math.min(f, 25); else if (p < 20000) f = Math.min(f, 80);
+    return f;
+  }
+
+  // ---------- 필터 ----------
+  function inArea(a, key) {
+    if (key === 'all') return true;
+    if (key === 'small') return a < 50;
+    if (key === '59') return a >= 50 && a < 65;
+    if (key === '74') return a >= 65 && a < 80;
+    if (key === '84') return a >= 80 && a <= 90;
+    if (key === 'large') return a > 90;
+    return true;
+  }
+  function cutoff(months) { var d = new Date(); d.setMonth(d.getMonth() - Number(months)); return d.toISOString().slice(0, 10); }
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; }
+
+  // 직거래(1) / 튀는 가격(2) 표시: 같은 단지·같은 면적, 앞뒤 120일 거래 중간값과 비교
+  function markOutliers() {
+    var groups = {};
+    T.forEach(function (r) { r.day = Date.parse(r[3]) / 864e5; var k = r[0] + '|' + Math.round(r[1]); (groups[k] = groups[k] || []).push(r); });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
+      g.forEach(function (r) {
+        if (r[5]) { r.x = 1; return; }
+        var near = [];
+        g.forEach(function (o) { if (o !== r && !o[5] && Math.abs(o.day - r.day) <= 120) near.push(o[2]); });
+        if (near.length < 3) { r.x = 0; return; }
+        var med = median(near);
+        r.x = (r[2] < med * 0.8 || r[2] > med * 1.25) ? 2 : 0;
+      });
+    });
+  }
+
+  function aggregate(onlyCode) {
+    var area = $('area').value, gu = $('gu').value, q = $('q').value.trim(), clean = $('clean').checked;
+    var from = cutoff($('period').value), map = {};
+    T.forEach(function (r) {
+      if (r[3] < from || !inArea(r[1], area)) return;
+      var c = C[r[0]]; if (!c) return;
+      if (onlyCode) { if (c[0] !== onlyCode) return; }
+      else { if (gu && c[2] !== gu) return; if (q && c[1].indexOf(q) < 0) return; }
+      var g = map[c[0]] || (map[c[0]] = { code: c[0], name: c[1], gu: c[2], hh: c[3], addr: c[4] || '', built: c[5] || 0, all: [], ok: [] });
+      g.all.push(r);
+      if (!(clean && r.x)) g.ok.push(r);
+    });
+    var basis = $('basis').value, out = [];
+    Object.keys(map).forEach(function (k) {
+      var g = map[k];
+      g.all.sort(function (a, b) { return a[3] < b[3] ? 1 : a[3] > b[3] ? -1 : b[2] - a[2]; });
+      g.ok.sort(function (a, b) { return a[3] < b[3] ? 1 : a[3] > b[3] ? -1 : b[2] - a[2]; });
+      if (!g.ok.length) return;
+      var prices = g.ok.map(function (r) { return r[2]; });
+      g.min = Math.min.apply(null, prices); g.max = Math.max.apply(null, prices);
+      g.count = g.ok.length;
+      g.recent = median(prices.slice(0, 3));
+      g.last = g.ok[0][2]; g.lastDate = g.ok[0][3];
+      g.areaAvg = g.ok.reduce(function (s, r) { return s + r[1]; }, 0) / g.ok.length;
+      g.price = basis === 'min' ? g.min : basis === 'last' ? g.last : g.recent;
+      g.dropped = g.all.length - g.ok.length;
+      out.push(g);
+    });
+    return out;
+  }
+
+  // ---------- 계산 ----------
+  function context(home) {
+    var manual = parseEok($('myVal').value), auto = home ? home.recent : 0;
+    var my = manual || auto, extra = parseEok($('extra').value), costs = $('costs').checked;
+    var net = my ? my - (costs ? brokerFee(my) : 0) : 0;      // 내 집 팔고 손에 쥐는 돈
+    var ctx = { my: my, auto: auto, manual: manual, extra: extra, costs: costs, net: net };
+    ctx.need = function (p, area) { return p + (costs ? acqTax(p, area || 84) + brokerFee(p) : 0) - net; };
+    ctx.maxPrice = 0;
+    if (my || extra) {                                          // 추가금이 예산 이하가 되는 최대 매수가
+      var lo = 0, hi = 1000000;
+      for (var i = 0; i < 40; i++) { var mid = (lo + hi) / 2; if (ctx.need(mid, 84) <= extra) lo = mid; else hi = mid; }
+      ctx.maxPrice = lo;
+    }
+    return ctx;
+  }
+
+  function sortList(arr, ctx) {
+    var s = $('sort').value, has = ctx.my || ctx.extra;
+    arr.forEach(function (g) { g.need = ctx.need(g.price, g.areaAvg); });
+    arr.sort(function (a, b) {
+      if (s === 'needDesc') return b.need - a.need;
+      if (s === 'fit') {
+        if (!has) return a.need - b.need;
+        var ia = a.need <= ctx.extra, ib = b.need <= ctx.extra;
+        if (ia !== ib) return ia ? -1 : 1;                     // 예산 안 단지 먼저, 그중 비싼(좋은) 곳부터
+        return ia ? b.need - a.need : a.need - b.need;
+      }
+      if (s === 'new') return (b.built - a.built) || (a.need - b.need);
+      if (s === 'hh') return b.hh - a.hh;
+      if (s === 'count') return b.count - a.count;
+      return a.need - b.need;
+    });
+    return arr;
+  }
+
+  function niceStep(span) {
+    var raw = span / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p;
+    return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p;
+  }
+
+  function needHtml(g, ctx) {
+    if (!ctx.my && !ctx.extra) return '<div class="need plain">' + eok(g.price) + '</div>';
+    var n = g.need;
+    if (n <= 0) return '<div class="need spare">' + money(n) + '<small>남음</small></div>';
+    var cls = ctx.extra ? (n <= ctx.extra ? 'ok' : 'over') : 'plain';
+    return '<div class="need ' + cls + '">+' + money(n) + '<small>더 필요</small></div>';
+  }
+
+  // ---------- 그리기 ----------
+  function render() {
+    var home = HOME ? (aggregate(HOME)[0] || null) : null;
+    var ctx = CTX = context(home);
+    var arr = sortList(aggregate().filter(function (g) { return g.code !== HOME; }), ctx);
+    if ($('fitOnly').checked && (ctx.my || ctx.extra)) arr = arr.filter(function (g) { return g.need <= ctx.extra; });
+    if (home) home.need = 0;
+    CUR = {}; arr.forEach(function (g) { CUR[g.code] = g; }); if (home) CUR[home.code] = home;
+
+    // 내 조건 카드
+    var hc = HOME ? C.filter(function (c) { return c[0] === HOME; })[0] : null;
+    $('homeName').className = 'home-name' + (hc ? '' : ' none');
+    $('homeName').textContent = hc ? '★ ' + hc[1] : '아래 목록에서 ☆를 눌러 내 집을 고르세요';
+    $('myAuto').textContent = ctx.manual ? (ctx.auto ? '자동값 ' + eok(ctx.auto) + ' 대신 직접 입력값 사용' : '직접 입력값 사용')
+      : ctx.auto ? '같은 평형 최근 시세 ' + eok(ctx.auto) + ' 자동 반영' : (hc ? '이 평형 거래가 없어요. 직접 입력해 주세요' : '');
+    var sum = $('sum');
+    if (ctx.my || ctx.extra) {
+      sum.hidden = false;
+      sum.innerHTML = (ctx.my ? '내 집 ' + eok(ctx.my) + (ctx.costs ? '(중개비 빼면 ' + eok(ctx.net) + ')' : '') + ' + ' : '') +
+        '보탤 돈 ' + (ctx.extra ? eok(ctx.extra) : '0') + ' → <b>' + eok(ctx.maxPrice) + '</b>짜리까지 살 수 있어요' +
+        (ctx.costs ? '<br><small>취득세·중개보수 약 ' + money(acqTax(ctx.maxPrice, 84) + brokerFee(ctx.maxPrice)) + ' 포함</small>' : '');
+    } else sum.hidden = true;
+    $('fitOnly').disabled = !(ctx.my || ctx.extra);
+
+    var list = $('list');
+    $('lgHome').hidden = !ctx.my; $('lgZone').hidden = !(ctx.my || ctx.extra);
+    if (!arr.length && !home) { list.innerHTML = '<div class="msg">조건에 맞는 단지가 없어요</div>'; $('axis').innerHTML = ''; setMeta(0); return; }
+
+    var lo = Infinity, hi = -Infinity;
+    arr.concat(home ? [home] : []).forEach(function (g) { if (g.min < lo) lo = g.min; if (g.max > hi) hi = g.max; });
+    if (ctx.my) { lo = Math.min(lo, ctx.my); hi = Math.max(hi, ctx.my); }
+    var step = niceStep(Math.max(hi - lo, 10000));
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    var pct = function (v) { return Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(2); };
+
+    var ax = '';
+    for (var t = lo; t <= hi + 1; t += step) ax += '<span style="left:' + pct(t) + '%">' + eok(t).replace('.0억', '억') + '</span>';
+    $('axis').innerHTML = ax;
+
+    var zone = (ctx.my || ctx.extra) && ctx.maxPrice > lo ? '<div class="zone" style="width:' + pct(ctx.maxPrice) + '%"></div>' : '';
+    var ref = ctx.my ? '<div class="ref" style="left:' + pct(ctx.my) + '%"></div>' : '';
+    var rowHtml = function (g, isHome) {
+      var right = isHome ? '<div class="need plain">' + eok(g.recent) + '<small>시세</small></div>' : needHtml(g, ctx);
+      return '<div class="row' + (isHome ? ' home' : '') + '" data-code="' + esc(g.code) + '">' +
+        '<div class="top"><div class="name">' + (isHome ? '<span class="badge">내 집</span>' : '') + esc(g.name) + '</div>' + right +
+        '<button class="pin" data-code="' + esc(g.code) + '" aria-label="' + (isHome ? '내 집 해제' : '내 집으로 고정') + '">' + (isHome ? '★' : '☆') + '</button></div>' +
+        '<div class="sub"><span>' + esc(g.gu) + ' · ' + Number(g.hh).toLocaleString() + '세대' + (g.built ? ' · ' + g.built + '년' : '') + ' · ' + g.count + '건</span>' +
+        '<span>' + (isHome ? '' : '기준 ' + eok(g.price) + ' · ') + eok(g.min) + '~' + eok(g.max) + '</span></div>' +
+        '<div class="track">' + (isHome ? '' : zone + ref) + '<div class="bar" style="left:' + pct(g.min) + '%;width:' + (pct(g.max) - pct(g.min)).toFixed(2) + '%"></div>' +
+        '<div class="dot" style="left:' + pct(isHome ? g.recent : g.price) + '%"></div></div></div>';
+    };
+    var html = '';
+    if (home) html += rowHtml(home, true);
+    else if (HOME) html += '<div class="hint">내 집은 이 조건(평형·기간)에 거래가 없어요.</div>';
+    html += arr.slice(0, SHOWN).map(function (g) { return rowHtml(g, false); }).join('');
+    if (arr.length > SHOWN) html += '<button class="more" id="more">더 보기 (' + (arr.length - SHOWN) + '개 남음)</button>';
+    list.innerHTML = html;
+    setMeta(arr.length + (home ? 1 : 0));
+  }
+
+  function setMeta(n) {
+    var dropped = 0; Object.keys(CUR).forEach(function (k) { dropped += CUR[k].dropped || 0; });
+    $('meta').textContent = n + '개 단지' + (UPD ? ' · ' + new Date(UPD).toLocaleDateString('ko-KR') + ' 갱신' : '') +
+      ($('clean').checked && dropped ? ' · 직거래·튀는 가격 ' + dropped + '건 뺌' : '');
+  }
+
+  // ---------- 상세(지도·계산·거래) ----------
+  function detailHtml(g) {
+    var ctx = CTX, isHome = g.code === HOME, h = '<div class="det">';
+    if (!isHome && (ctx.my || ctx.extra)) {
+      var tax = ctx.costs ? acqTax(g.price, g.areaAvg) : 0, fee = ctx.costs ? brokerFee(g.price) : 0;
+      h += '<table class="calc">' +
+        '<tr><td>살 집 (' + ({ recent: '최근 시세', min: '기간 최저가', last: '마지막 거래가' })[$('basis').value] + ')</td><td>' + eok(g.price) + '</td></tr>' +
+        (ctx.costs ? '<tr><td>취득세 등</td><td>+' + money(tax) + '</td></tr><tr><td>사는 쪽 중개보수</td><td>+' + money(fee) + '</td></tr>' : '') +
+        (ctx.my ? '<tr class="minus"><td>내 집 팔고 받는 돈</td><td>−' + eok(ctx.my) + '</td></tr>' : '') +
+        (ctx.my && ctx.costs ? '<tr><td>파는 쪽 중개보수</td><td>+' + money(brokerFee(ctx.my)) + '</td></tr>' : '') +
+        '<tr class="tot"><td>' + (g.need > 0 ? '더 필요한 돈' : '남는 돈') + '</td><td>' + money(g.need) + '</td></tr>' +
+        (ctx.extra ? '<tr><td>내 예산(' + eok(ctx.extra) + ') 대비</td><td style="color:var(' + (g.need <= ctx.extra ? '--ok)">' + money(ctx.extra - g.need) + ' 여유' : '--over)">' + money(g.need - ctx.extra) + ' 부족') + '</td></tr>' : '') +
+        '</table>';
+    }
+    var q = g.gu + ' ' + g.name;
+    var addr = g.addr ? '서울특별시 ' + (g.addr.match(/^(.*?\d+(?:-\d+)?)(\s|$)/) || [0, g.addr])[1] : '서울특별시 ' + q;
+    h += '<iframe class="map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="' + esc(g.name) + ' 지도" src="https://maps.google.com/maps?q=' + encodeURIComponent(addr) + '&z=16&hl=ko&output=embed"></iframe>';
+    h += '<div class="addr">' + esc(g.addr ? '서울 ' + g.addr : g.gu) + (g.built ? ' · ' + g.built + '년 준공' : '') + '</div>';
+    h += '<div class="links"><a target="_blank" rel="noopener" href="https://map.naver.com/p/search/' + encodeURIComponent(q) + '">네이버지도</a>' +
+         '<a target="_blank" rel="noopener" href="https://map.kakao.com/link/search/' + encodeURIComponent(q) + '">카카오맵</a></div>';
+    h += '<table class="trades"><tr><th>계약일</th><th>전용</th><th>층</th><th>금액</th></tr>' +
+      g.all.slice(0, 10).map(function (r) {
+        var tag = r.x === 1 ? '<span class="tag">직거래</span>' : r.x === 2 ? '<span class="tag">튀는 가격</span>' : '';
+        var cut = $('clean').checked && r.x;
+        return '<tr' + (cut ? ' class="x"' : '') + '><td>' + r[3].slice(2).replace(/-/g, '.') + '</td><td>' + r[1] + '㎡</td><td>' + (r[4] || '-') + '</td><td>' + eok(r[2]) + tag + '</td></tr>';
+      }).join('') + '</table>';
+    if (g.all.length > 10) h += '<div class="addr">최근 10건만 표시 (전체 ' + g.all.length + '건)</div>';
+    return h + '</div>';
+  }
+
+  $('list').addEventListener('click', function (e) {
+    var b = e.target.closest('.pin');
+    if (b) {
+      var code = b.getAttribute('data-code');
+      HOME = (HOME === code) ? '' : code;
+      store(HOME_KEY, HOME || null);
+      SHOWN = 60; render(); window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (e.target.id === 'more') { SHOWN += 60; render(); return; }
+    if (e.target.closest('.det')) return;
+    var row = e.target.closest('.row'); if (!row) return;
+    var open = row.querySelector('.det');
+    if (open) { open.remove(); return; }
+    var g = CUR[row.getAttribute('data-code')]; if (!g) return;
+    row.insertAdjacentHTML('beforeend', detailHtml(g));
+  });
+  ['area', 'period', 'gu', 'sort', 'basis', 'clean', 'fitOnly', 'costs'].forEach(function (id) {
+    $(id).addEventListener('change', function () { SHOWN = 60; savePref(); render(); });
+  });
+  ['q', 'myVal', 'extra'].forEach(function (id) {
+    var tm; $(id).addEventListener('input', function () { clearTimeout(tm); tm = setTimeout(function () { SHOWN = 60; savePref(); render(); }, 250); });
+  });
+
+  function apply(D) {
+    C = D.c; T = D.t; UPD = D.u || '';
+    markOutliers();
+    var sel = $('gu'), cur = sel.value, gus = {};
+    C.forEach(function (c) { gus[c[2]] = 1; });
+    sel.innerHTML = '<option value="">서울 전체</option>' + Object.keys(gus).sort().map(function (g) { return '<option>' + esc(g) + '</option>'; }).join('');
+    sel.value = cur;
+    render();
+  }
+
+  // 1) 이 기기에 저장된 데이터로 바로 그리기  2) 최신 데이터 받아서 갱신
+  var cached = load(CACHE_KEY);
+  if (cached) { try { apply(JSON.parse(cached)); } catch (e) { store(CACHE_KEY, null); cached = null; } }
+  fetch(DATA_URL, { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function (txt) {
+      var D = JSON.parse(txt);
+      if (!D || !D.t || !D.t.length) throw new Error('빈 데이터');
+      if (txt !== cached) { store(CACHE_KEY, txt); apply(D); }
+    })
+    .catch(function (err) {
+      if (!cached) $('list').innerHTML = '<div class="msg">데이터를 불러오지 못했어요. 잠시 후 새로고침해 주세요.<br><small>' + esc(err.message) + '</small></div>';
+    });
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>서울 아파트 실거래 범위</title>
 <meta name="description" content="서울 500세대 이상 아파트의 최근 실거래가 범위(최저~최고)와 최근 거래가를 한눈에 비교">
 <style>
