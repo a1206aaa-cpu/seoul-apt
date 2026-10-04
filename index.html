@@ -23,7 +23,7 @@
   .me h2 { font-size:13px; color:var(--sub); font-weight:600; margin:0 0 8px; }
   .home-name { font-weight:700; font-size:15px; }
   .home-name.none { color:var(--sub); font-weight:400; font-size:13px; }
-  .fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin-top:10px; }
   .fields label { font-size:12px; color:var(--sub); display:block; }
   .num { display:flex; align-items:center; border:1px solid var(--line); border-radius:8px; background:var(--bg); margin-top:3px; }
   .num input { border:0; background:none; flex:1; min-width:0; padding:8px; font:inherit; font-size:16px; color:var(--text); font-variant-numeric:tabular-nums; }
@@ -65,6 +65,12 @@
   .bar { position:absolute; top:2px; height:8px; background:var(--bar); border-radius:4px; min-width:4px; }
   .dot { position:absolute; top:0; width:12px; height:12px; margin-left:-6px; border-radius:50%; background:var(--dot); border:2px solid var(--card); }
   .ref { position:absolute; top:-3px; bottom:-3px; width:0; border-left:2px dashed var(--me); }
+  .band { font-size:13px; font-weight:700; margin:14px 2px 6px; display:flex; align-items:baseline; gap:6px; }
+  .band small { font-weight:400; color:var(--sub); font-size:11px; }
+  .band.now { color:var(--ok); }
+  .rt { flex:0 0 auto; text-align:right; }
+  .rt .gap { font-size:11px; color:var(--sub); white-space:nowrap; }
+  .rt .gap.ok { color:var(--ok); font-weight:600; }
   .badge { display:inline-block; font-size:11px; font-weight:700; color:#fff; background:var(--me); border-radius:6px; padding:1px 6px; margin-right:6px; vertical-align:1px; }
   .det { margin-top:10px; border-top:1px solid var(--line); padding-top:10px; cursor:default; }
   .calc { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
@@ -95,7 +101,7 @@
 <body>
 <div class="wrap">
 <header>
-  <h1>얼마 더 있으면 갈아탈 수 있을까</h1>
+  <h1>얼마 더 보태면 갈아탈 수 있을까</h1>
   <div class="meta" id="meta">불러오는 중…</div>
 </header>
 
@@ -109,9 +115,9 @@
       <div class="auto" id="myAuto"></div>
     </div>
     <div>
-      <label for="extra">더 보탤 수 있는 돈</label>
+      <label for="extra">지금 보탤 수 있는 돈 <small>(선택)</small></label>
       <div class="num"><input id="extra" inputmode="decimal" placeholder="예: 3"><span>억</span></div>
-      <div class="auto">현금 + 대출 가능액</div>
+      <div class="auto">모아둔 현금 + 대출 가능액</div>
     </div>
   </div>
   <label class="check"><input type="checkbox" id="costs" checked>취득세·중개보수까지 포함해서 계산 (추정)</label>
@@ -139,9 +145,8 @@
     <option value="last">마지막 거래가</option>
   </select>
   <select id="sort" aria-label="정렬">
-    <option value="need" selected>추가금 적은순</option>
-    <option value="fit">내 예산에 가까운순</option>
-    <option value="needDesc">추가금 많은순</option>
+    <option value="need" selected>추가금 적은순(바로 윗단계부터)</option>
+    <option value="needDesc">비싼 단지부터</option>
     <option value="new">신축순</option>
     <option value="hh">세대수순</option>
     <option value="count">거래 많은순</option>
@@ -150,7 +155,7 @@
 </div>
 <div class="toggles">
   <label class="check"><input type="checkbox" id="clean" checked>직거래·튀는 가격 빼기</label>
-  <label class="check"><input type="checkbox" id="fitOnly">예산 안 단지만</label>
+  <label class="check"><input type="checkbox" id="cheap">내 집보다 싼 단지도 보기</label>
 </div>
 
 <div class="sticky">
@@ -291,12 +296,6 @@
     arr.forEach(function (g) { g.need = ctx.need(g.price, g.areaAvg); });
     arr.sort(function (a, b) {
       if (s === 'needDesc') return b.need - a.need;
-      if (s === 'fit') {
-        if (!has) return a.need - b.need;
-        var ia = a.need <= ctx.extra, ib = b.need <= ctx.extra;
-        if (ia !== ib) return ia ? -1 : 1;                     // 예산 안 단지 먼저, 그중 비싼(좋은) 곳부터
-        return ia ? b.need - a.need : a.need - b.need;
-      }
       if (s === 'new') return (b.built - a.built) || (a.need - b.need);
       if (s === 'hh') return b.hh - a.hh;
       if (s === 'count') return b.count - a.count;
@@ -311,19 +310,25 @@
   }
 
   function needHtml(g, ctx) {
-    if (!ctx.my && !ctx.extra) return '<div class="need plain">' + eok(g.price) + '</div>';
+    if (!ctx.my && !ctx.extra) return '<div class="rt"><div class="need plain">' + eok(g.price) + '</div></div>';
     var n = g.need;
-    if (n <= 0) return '<div class="need spare">' + money(n) + '<small>남음</small></div>';
-    var cls = ctx.extra ? (n <= ctx.extra ? 'ok' : 'over') : 'plain';
-    return '<div class="need ' + cls + '">+' + money(n) + '<small>더 필요</small></div>';
+    if (n <= 0) return '<div class="rt"><div class="need plain">' + money(n) + '<small>남음</small></div></div>';
+    var gap = n - ctx.extra, cls = ctx.extra ? (gap <= 0 ? 'ok' : 'over') : 'plain';
+    var line = !ctx.extra ? '' : gap <= 0 ? '<div class="gap ok">지금 돈으로 가능</div>' : '<div class="gap">지금 돈 빼고 ' + money(gap) + ' 더</div>';
+    return '<div class="rt"><div class="need ' + cls + '">+' + money(n) + '<small>보태면</small></div>' + line + '</div>';
   }
+  // 얼마 더 모으면 되는지 구간
+  var BANDS = [[0, '지금 돈으로 살 수 있어요'], [10000, '1억 안쪽으로 더 모으면'], [20000, '1~2억 더 모으면'], [30000, '2~3억 더 모으면'],
+               [50000, '3~5억 더 모으면'], [70000, '5~7억 더 모으면'], [100000, '7~10억 더 모으면'], [Infinity, '10억 넘게 더 모으면']];
+  function bandOf(gap) { for (var i = 0; i < BANDS.length; i++) if (gap <= BANDS[i][0]) return i; return BANDS.length - 1; }
 
   // ---------- 그리기 ----------
   function render() {
     var home = HOME ? (aggregate(HOME)[0] || null) : null;
     var ctx = CTX = context(home);
     var arr = sortList(aggregate().filter(function (g) { return g.code !== HOME; }), ctx);
-    if ($('fitOnly').checked && (ctx.my || ctx.extra)) arr = arr.filter(function (g) { return g.need <= ctx.extra; });
+    var hidden = 0;
+    if (ctx.my && !$('cheap').checked) arr = arr.filter(function (g) { if (g.need <= 0) { hidden++; return false; } return true; });
     if (home) home.need = 0;
     CUR = {}; arr.forEach(function (g) { CUR[g.code] = g; }); if (home) CUR[home.code] = home;
 
@@ -337,10 +342,10 @@
     if (ctx.my || ctx.extra) {
       sum.hidden = false;
       sum.innerHTML = (ctx.my ? '내 집 ' + eok(ctx.my) + (ctx.costs ? '(중개비 빼면 ' + eok(ctx.net) + ')' : '') + ' + ' : '') +
-        '보탤 돈 ' + (ctx.extra ? eok(ctx.extra) : '0') + ' → <b>' + eok(ctx.maxPrice) + '</b>짜리까지 살 수 있어요' +
+        '보탤 돈 ' + (ctx.extra ? eok(ctx.extra) : '0') + ' → 지금은 <b>' + eok(ctx.maxPrice) + '</b>짜리까지 가능' +
         (ctx.costs ? '<br><small>취득세·중개보수 약 ' + money(acqTax(ctx.maxPrice, 84) + brokerFee(ctx.maxPrice)) + ' 포함</small>' : '');
     } else sum.hidden = true;
-    $('fitOnly').disabled = !(ctx.my || ctx.extra);
+    $('cheap').disabled = !ctx.my;
 
     var list = $('list');
     $('lgHome').hidden = !ctx.my; $('lgZone').hidden = !(ctx.my || ctx.extra);
@@ -372,16 +377,31 @@
     var html = '';
     if (home) html += rowHtml(home, true);
     else if (HOME) html += '<div class="hint">내 집은 이 조건(평형·기간)에 거래가 없어요.</div>';
-    html += arr.slice(0, SHOWN).map(function (g) { return rowHtml(g, false); }).join('');
+    if (!ctx.my && !ctx.extra) html += '<div class="hint">☆로 내 집을 고르거나 위에 금액을 넣으면, 단지마다 얼마를 더 보태야 하는지 보여드려요.</div>';
+    var banded = (ctx.my || ctx.extra) && ($('sort').value === 'need' || $('sort').value === 'needDesc'), lastBand = -1;
+    var cnt = {}; if (banded) arr.forEach(function (g) { if (g.need > 0) { var b = bandOf(g.need - ctx.extra); cnt[b] = (cnt[b] || 0) + 1; } });
+    html += arr.slice(0, SHOWN).map(function (g) {
+      var head = '';
+      if (banded && g.need > 0) {
+        var b = bandOf(g.need - ctx.extra);
+        if (b !== lastBand) {
+          lastBand = b;
+          var label = ctx.extra ? BANDS[b][1] : BANDS[b][1].replace('더 모으면', '보태면').replace('지금 돈으로 살 수 있어요', '추가금 없이');
+          head = '<div class="band' + (b === 0 ? ' now' : '') + '">' + label + '<small>' + cnt[b] + '곳</small></div>';
+        }
+      } else if (banded && g.need <= 0 && lastBand !== -2) { lastBand = -2; head = '<div class="band">내 집보다 싼 곳</div>'; }
+      return head + rowHtml(g, false);
+    }).join('');
+    if (hidden && !arr.length) html += '<div class="msg">이 조건에선 내 집보다 비싼 단지가 없어요</div>';
     if (arr.length > SHOWN) html += '<button class="more" id="more">더 보기 (' + (arr.length - SHOWN) + '개 남음)</button>';
     list.innerHTML = html;
-    setMeta(arr.length + (home ? 1 : 0));
+    setMeta(arr.length + (home ? 1 : 0), hidden);
   }
 
-  function setMeta(n) {
+  function setMeta(n, hidden) {
     var dropped = 0; Object.keys(CUR).forEach(function (k) { dropped += CUR[k].dropped || 0; });
     $('meta').textContent = n + '개 단지' + (UPD ? ' · ' + new Date(UPD).toLocaleDateString('ko-KR') + ' 갱신' : '') +
-      ($('clean').checked && dropped ? ' · 직거래·튀는 가격 ' + dropped + '건 뺌' : '');
+      (hidden ? ' · 내 집보다 싼 ' + hidden + '곳 숨김' : '') + ($('clean').checked && dropped ? ' · 직거래·튀는 가격 ' + dropped + '건 뺌' : '');
   }
 
   // ---------- 상세(지도·계산·거래) ----------
@@ -431,7 +451,7 @@
     var g = CUR[row.getAttribute('data-code')]; if (!g) return;
     row.insertAdjacentHTML('beforeend', detailHtml(g));
   });
-  ['area', 'period', 'gu', 'sort', 'basis', 'clean', 'fitOnly', 'costs'].forEach(function (id) {
+  ['area', 'period', 'gu', 'sort', 'basis', 'clean', 'cheap', 'costs'].forEach(function (id) {
     $(id).addEventListener('change', function () { SHOWN = 60; savePref(); render(); });
   });
   ['q', 'myVal', 'extra'].forEach(function (id) {
