@@ -84,6 +84,20 @@
   .msg { color:var(--sub); padding:30px 0; text-align:center; }
   .tbl { margin-top:10px; font-size:12px; }
   .tbl summary { cursor:pointer; color:var(--sub); }
+  #waveCard { margin-top:10px; }
+  .wsum { font-size:13px; line-height:1.6; margin-bottom:8px; }
+  .wsum b { font-weight:700; }
+  .heat { display:grid; gap:2px; font-size:11px; align-items:center; }
+  .heat .hl { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text); cursor:pointer; padding-right:4px; }
+  .heat .hr { color:var(--sub); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; padding-left:4px; }
+  .heat .c { height:18px; border-radius:3px; position:relative; }
+  .heat .c.t::after { content:''; position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:var(--card); box-shadow:0 0 0 1.5px var(--text); }
+  .heat .mh { color:var(--muted); text-align:center; font-size:10px; }
+  .hnote { font-size:11px; color:var(--sub); margin-top:8px; }
+  .dong.fresh { stroke:var(--hover); stroke-width:1.6; }
+  .chips { display:flex; gap:2px; width:100%; }
+  .chips span { flex:1; text-align:center; font-size:10px; color:var(--sub); }
+  .chips i { display:block; height:10px; border-radius:2px; margin-bottom:2px; }
   footer { color:var(--sub); font-size:11px; text-align:center; padding:16px 0 0; line-height:1.6; }
 </style>
 </head>
@@ -100,6 +114,7 @@
     <button data-m="growth" class="on">거래 증가율</button>
     <button data-m="count">거래 건수</button>
     <button data-m="turn">세대당 거래</button>
+    <button data-m="wave">먼저 뜬 곳</button>
   </div>
   <select id="area" aria-label="전용면적">
     <option value="all" selected>전체 평형</option>
@@ -108,6 +123,10 @@
     <option value="large">90㎡ 초과</option>
   </select>
   <select id="gu" aria-label="구"><option value="">서울 전체</option></select>
+  <select id="wbase" aria-label="확산 기준" hidden>
+    <option value="start" selected>달아오른 달 기준</option>
+    <option value="peak">정점 달 기준</option>
+  </select>
 </div>
 
 <div class="time">
@@ -123,6 +142,13 @@
   <div class="legend" id="legend"></div>
 </div>
 <div class="note" id="note"></div>
+
+<div class="card" id="waveCard" hidden>
+  <h2 id="heatT">구별 거래 열기 흐름</h2>
+  <div class="wsum" id="waveSum"></div>
+  <div class="heat" id="heat"></div>
+  <div class="hnote">칸 색 = 그 줄(구·동)에서 거래가 가장 많던 달 대비 비율. ● = 달아오른 달. 줄을 누르면 지도에서 그 지역으로 가요.</div>
+</div>
 
 <div id="detail"></div>
 
@@ -166,6 +192,9 @@
   var SEQ = DARK ? ['#1f2b3d', '#184f95', '#2a78d6', '#6da7ec', '#cde2fb'] : ['#e3eefc', '#9ec5f4', '#5598e7', '#256abf', '#0d366b'];
   var NEG = DARK ? ['#383835', '#2a4e86', '#6da7ec'] : ['#f0efec', '#86b6ef', '#1c5cab'];    // 감소: 회색 → 파랑
   var POS = DARK ? ['#383835', '#9a3a38', '#ff8f8a'] : ['#f0efec', '#ee8f8c', '#b3261e'];    // 증가: 회색 → 빨강
+  var HEAT = DARK ? ['#3a2516', '#7a3510', '#c2540f', '#f08a3e', '#ffd2ad'] : ['#fde9d9', '#f8b27e', '#ec7a2c', '#b8470a', '#6b2704'];
+  function waveColor(t, last) { return mix(HEAT, last ? 1 - t / last : 1); }   // 먼저 뜬 곳일수록 진하게
+  function heatColor(r) { return mix(HEAT, r); }
   function divColor(v) { return v < 0 ? mix(NEG, Math.min(1, -v / 0.6)) : mix(POS, Math.min(1, v / 1.0)); }
 
   // ---------- 집계 ----------
@@ -260,6 +289,9 @@
   }
 
   function paint() {
+    var wave = METRIC === 'wave';
+    $('waveCard').hidden = !wave; $('wbase').hidden = !wave;
+    if (wave) return paintWave();
     var m = Number($('month').value), gu = $('gu').value, vals = [];
     Object.keys(DONG).forEach(function (k) {
       var d = DONG[k];
@@ -284,6 +316,87 @@
     $('note').textContent = st ? '⚠ ' + mName(m) + '은 ' + st + '이라 실제보다 적게 보여요. 증가율은 ' + mName(lastFull()) + '을 기준으로 보는 게 정확해요.' : '';
     ranks(m);
     if (SEL) detail(SEL);
+  }
+  // 확산: 3개월 이동평균으로 '달아오른 달'(최고치의 70%를 처음 넘은 달)과 '가장 뜨거운 달'
+  function timing(series) {
+    var last = lastFull(), s = series.slice(0, last + 1), tot = s.reduce(function (a, b) { return a + b; }, 0);
+    if (tot < 15) return null;
+    var ma = s.map(function (v, i) { var a = s[i - 1], b = s[i + 1], n = 1, t = v; if (a != null) { t += a; n++; } if (b != null) { t += b; n++; } return t / n; });
+    var pk = 0; ma.forEach(function (v, i) { if (v > ma[pk]) pk = i; });
+    var st = 0; for (var i = 0; i < ma.length; i++) if (ma[i] >= ma[pk] * 0.7) { st = i; break; }
+    return { start: st, peak: pk, t: $('wbase').value === 'peak' ? pk : st, tot: tot, rising: pk === last, s: s };
+  }
+  function paintWave() {
+    var m = Number($('month').value), gu = $('gu').value, last = lastFull();
+    Object.keys(DONG).forEach(function (k) {
+      var d = DONG[k]; d.tm = null; d.has = false;
+      if (!d.apts.length || (gu && d.gu !== gu)) return;
+      d.has = true; d.series = dongSeries(k); d.tm = timing(d.series);
+    });
+    Object.keys(DONG).forEach(function (k) {
+      var d = DONG[k], fill = null, fresh = false;
+      if (d.has && d.tm && d.tm.t <= m) { fill = waveColor(d.tm.t, last); fresh = d.tm.t === m && m < last; }
+      d.el.forEach(function (p) {
+        p.setAttribute('class', 'dong' + (fill ? '' : ' na') + (fresh ? ' fresh' : '') + (SEL === k ? ' sel' : ''));
+        p.style.fill = fill || '';
+        if (SEL === k || fresh) p.parentNode.appendChild(p);
+      });
+    });
+    var chips = ''; for (var i = 0; i <= last; i++) chips += '<span><i style="background:' + waveColor(i, last) + '"></i>' + Number(MONTHS[i].slice(5)) + '</span>';
+    $('legend').innerHTML = '<div class="lg"><div class="chips">' + chips + '</div><div class="ticks"><span>← 먼저 달아오름</span><span>나중에 →</span></div></div><span><i class="na"></i>단지 없음·거래 적음' + (m < last ? '·아직' : '') + '</span>';
+    $('mlabel').innerHTML = mName(Math.min(m, last)) + '<small>' + (m < last ? '여기까지 달아오른 곳' : '전체 흐름') + '</small>';
+    $('note').textContent = '9·10월처럼 신고가 덜 들어온 달은 계산에서 뺐어요. 자료가 12개월이라 26년 봄 거래 붐 한 번의 흐름을 보여줘요.';
+    waveRanks(); heatmap();
+    if (SEL) detail(SEL);
+  }
+  function waveRanks() {
+    var ds = Object.keys(DONG).map(function (k) { return DONG[k]; }).filter(function (d) { return d.has && d.tm; });
+    var early = ds.slice().sort(function (a, b) { return (a.tm.t - b.tm.t) || (b.tm.tot - a.tm.tot); });
+    var late = ds.slice().sort(function (a, b) { return (b.tm.t - a.tm.t) || (b.tm.tot - a.tm.tot); });
+    var li = function (d, i) {
+      return '<li data-key="' + esc(d.key) + '"><span class="n">' + (i + 1) + '</span><span class="sw" style="background:' + waveColor(d.tm.t, lastFull()) + '"></span>' +
+        '<span class="nm">' + esc(d.name) + '<small>' + esc(d.gu) + '</small></span><span class="v">' + mName(d.tm.t) + (d.tm.rising ? ' ↗' : '') + '</span></li>';
+    };
+    $('r1t').innerHTML = '먼저 달아오른 동<small>거래 열기가 시작된 곳</small>';
+    $('r1').innerHTML = early.slice(0, 10).map(li).join('') || '<li>해당 없음</li>';
+    $('r2t').innerHTML = '나중에 달아오른 동<small>열기가 번져간 곳 · ↗ 아직 상승 중</small>';
+    $('r2').innerHTML = late.slice(0, 10).map(li).join('') || '<li>해당 없음</li>';
+  }
+  function heatmap() {
+    var gu = $('gu').value, last = lastFull(), rows = [];
+    if (!gu) {
+      var byGu = {};
+      Object.keys(DONG).forEach(function (k) {
+        var d = DONG[k]; if (!d.apts.length) return;
+        var s = byGu[d.gu] || (byGu[d.gu] = MONTHS.map(function () { return 0; }));
+        dongSeries(k).forEach(function (v, i) { s[i] += v; });
+      });
+      Object.keys(byGu).forEach(function (g) { var tm = timing(byGu[g]); if (tm) rows.push({ label: g, gu: g, tm: tm }); });
+    } else {
+      Object.keys(DONG).forEach(function (k) { var d = DONG[k]; if (d.has && d.tm) rows.push({ label: d.name, key: k, tm: d.tm }); });
+      rows.sort(function (a, b) { return b.tm.tot - a.tm.tot; }); rows = rows.slice(0, 30);
+    }
+    rows.sort(function (a, b) { return (a.tm.t - b.tm.t) || (b.tm.tot - a.tm.tot); });
+    $('heatT').innerHTML = (gu ? esc(gu) + ' 동별' : '구별') + ' 거래 열기 흐름<small>' + ($('wbase').value === 'peak' ? '가장 뜨거웠던 달' : '달아오르기 시작한 달') + ' 순</small>';
+    var n = last + 1, h = '<div></div>' + MONTHS.slice(0, n).map(function (x) { return '<div class="mh">' + Number(x.slice(5)) + '</div>'; }).join('') + '<div></div>';
+    rows.forEach(function (r) {
+      var mx = Math.max.apply(null, r.tm.s.concat([1]));
+      h += '<div class="hl" data-gu="' + esc(r.gu || '') + '" data-key="' + esc(r.key || '') + '">' + esc(r.label) + '</div>' +
+        r.tm.s.map(function (v, i) { return '<div class="c' + (i === r.tm.t ? ' t' : '') + '" style="background:' + heatColor(v / mx) + '" title="' + esc(r.label) + ' ' + mName(i) + ' ' + v + '건"></div>'; }).join('') +
+        '<div class="hr">' + Number(MONTHS[r.tm.t].slice(5)) + '월' + (r.tm.rising ? '↗' : '') + '</div>';
+    });
+    var hEl = $('heat'); hEl.style.gridTemplateColumns = '64px repeat(' + n + ', minmax(0,1fr)) 40px'; hEl.innerHTML = rows.length ? h : '<div class="msg">거래가 적어 흐름을 계산할 수 없어요</div>';
+    // 요약 문장
+    if (rows.length >= 3) {
+      var first = rows.filter(function (r) { return r.tm.t === rows[0].tm.t; }).slice(0, 4).map(function (r) { return r.label; });
+      var lastT = rows[rows.length - 1].tm.t, lastR = rows.filter(function (r) { return r.tm.t === lastT; }).slice(0, 4).map(function (r) { return r.label; });
+      var rising = rows.filter(function (r) { return r.tm.rising; }).map(function (r) { return r.label; });
+      var homeLine = '';
+      var hci = D.c.findIndex(function (c) { return c[0] === HOME; });
+      if (hci >= 0 && !gu) { var hr = rows.filter(function (r) { return r.gu === D.c[hci][2]; })[0]; if (hr) homeLine = '<br>우리 집이 있는 <b>' + esc(hr.gu) + '</b>는 ' + mName(hr.tm.t) + ' (' + (rows.indexOf(hr) + 1) + '/' + rows.length + '번째).'; }
+      $('waveSum').innerHTML = '가장 먼저 <b>' + first.map(esc).join('·') + '</b> (' + mName(rows[0].tm.t) + ') → 마지막 <b>' + lastR.map(esc).join('·') + '</b> (' + mName(lastT) + ').' +
+        (rising.length ? '<br>아직 오르는 중: ' + rising.slice(0, 6).map(esc).join('·') : '') + homeLine;
+    } else $('waveSum').innerHTML = '';
   }
   function lastFull() { for (var i = MONTHS.length - 1; i >= 0; i--) if (!mState(i)) return i; return MONTHS.length - 1; }
 
@@ -376,16 +489,26 @@
     var p = e.target.closest('path.dong'); if (!p) { tip.style.display = 'none'; return; }
     var d = DONG[p.dataset.key], card = $('mapcard').getBoundingClientRect();
     tip.style.display = 'block'; tip.style.left = (e.clientX - card.left) + 'px'; tip.style.top = (e.clientY - card.top) + 'px';
+    if (METRIC === 'wave') { tip.innerHTML = '<b>' + esc(d.name) + '</b> ' + esc(d.gu) + '<br>' + (!d.has ? '500세대+ 단지 없음' : !d.tm ? '거래가 적어 계산 안 함' : '달아오름 ' + mName(d.tm.start) + ' · 최고 ' + mName(d.tm.peak) + (d.tm.rising ? ' (상승 중)' : '')); return; }
     tip.innerHTML = '<b>' + esc(d.name) + '</b> ' + esc(d.gu) + '<br>' + (d.has ? fmt(d.val) + (METRIC === 'growth' && d.prev != null ? ' (' + d.prev + '→' + d.now + '건)' : '') + ' · ' + d.apts.length + '개 단지' : '500세대+ 단지 없음');
   });
   $('map').addEventListener('mouseleave', function () { tip.style.display = 'none'; });
   $('map').addEventListener('click', function (e) { var p = e.target.closest('path.dong'); if (p) select(p.dataset.key, false); });
   $('zoomout').addEventListener('click', function () { SEL = null; $('detail').innerHTML = ''; zoomTo($('gu').value || null); paint(); });
+  $('heat').addEventListener('click', function (e) {
+    var l = e.target.closest('.hl'); if (!l) return;
+    if (l.dataset.key) { select(l.dataset.key, true); return; }
+    $('gu').value = l.dataset.gu; SEL = null; $('detail').innerHTML = ''; zoomTo(l.dataset.gu); paint();
+    $('mapcard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('wbase').addEventListener('change', paint);
   ['r1', 'r2'].forEach(function (id) { $(id).addEventListener('click', function (e) { var li = e.target.closest('li[data-key]'); if (li) select(li.dataset.key, true); }); });
   document.querySelectorAll('.seg button').forEach(function (b) {
     b.addEventListener('click', function () {
       document.querySelectorAll('.seg button').forEach(function (x) { x.classList.toggle('on', x === b); });
-      METRIC = b.dataset.m; paint();
+      var was = METRIC; METRIC = b.dataset.m;
+      if (METRIC === 'wave' && was !== 'wave') $('month').value = lastFull();
+      paint();
     });
   });
   $('month').addEventListener('input', paint);
@@ -393,10 +516,12 @@
   $('gu').addEventListener('change', function () { SEL = null; $('detail').innerHTML = ''; zoomTo($('gu').value || null); paint(); });
   $('play').addEventListener('click', function () {
     if (PLAY) { clearInterval(PLAY); PLAY = null; $('play').textContent = '▶'; return; }
-    var r = $('month'); if (Number(r.value) >= Number(r.max)) r.value = METRIC === 'growth' ? 5 : 0;
+    var r = $('month'), end = function () { return METRIC === 'wave' ? lastFull() : Number(r.max); };
+    if (Number(r.value) >= end()) r.value = METRIC === 'growth' ? 5 : 0;
+    if (METRIC === 'wave') paint();
     $('play').textContent = '❚❚';
     PLAY = setInterval(function () {
-      if (Number(r.value) >= Number(r.max)) { clearInterval(PLAY); PLAY = null; $('play').textContent = '▶'; return; }
+      if (Number(r.value) >= end()) { clearInterval(PLAY); PLAY = null; $('play').textContent = '▶'; return; }
       r.value = Number(r.value) + 1; paint();
     }, 1100);
   });
