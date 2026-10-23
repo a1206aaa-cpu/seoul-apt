@@ -324,7 +324,8 @@
     var ma = s.map(function (v, i) { var a = s[i - 1], b = s[i + 1], n = 1, t = v; if (a != null) { t += a; n++; } if (b != null) { t += b; n++; } return t / n; });
     var pk = 0; ma.forEach(function (v, i) { if (v > ma[pk]) pk = i; });
     var st = 0; for (var i = 0; i < ma.length; i++) if (ma[i] >= ma[pk] * 0.7) { st = i; break; }
-    return { start: st, peak: pk, t: $('wbase').value === 'peak' ? pk : st, tot: tot, rising: pk === last, s: s };
+    var t = $('wbase').value === 'peak' ? pk : st;
+    return { start: st, peak: pk, t: t, early: t === 0, tot: tot, rising: pk === last, s: s };
   }
   function paintWave() {
     var m = Number($('month').value), gu = $('gu').value, last = lastFull();
@@ -345,7 +346,7 @@
     var chips = ''; for (var i = 0; i <= last; i++) chips += '<span><i style="background:' + waveColor(i, last) + '"></i>' + Number(MONTHS[i].slice(5)) + '</span>';
     $('legend').innerHTML = '<div class="lg"><div class="chips">' + chips + '</div><div class="ticks"><span>← 먼저 달아오름</span><span>나중에 →</span></div></div><span><i class="na"></i>단지 없음·거래 적음' + (m < last ? '·아직' : '') + '</span>';
     $('mlabel').innerHTML = mName(Math.min(m, last)) + '<small>' + (m < last ? '여기까지 달아오른 곳' : '전체 흐름') + '</small>';
-    $('note').textContent = '9·10월처럼 신고가 덜 들어온 달은 계산에서 뺐어요. 자료가 12개월이라 26년 봄 거래 붐 한 번의 흐름을 보여줘요.';
+    $('note').textContent = '신고가 덜 들어온 최근 두 달은 계산에서 뺐어요. 자료가 ' + mName(0) + '부터라, 그때 이미 거래가 많던 곳은 "' + mName(0) + ' 이전"(~표시)으로 보여요.';
     waveRanks(); heatmap();
     if (SEL) detail(SEL);
   }
@@ -355,7 +356,7 @@
     var late = ds.slice().sort(function (a, b) { return (b.tm.t - a.tm.t) || (b.tm.tot - a.tm.tot); });
     var li = function (d, i) {
       return '<li data-key="' + esc(d.key) + '"><span class="n">' + (i + 1) + '</span><span class="sw" style="background:' + waveColor(d.tm.t, lastFull()) + '"></span>' +
-        '<span class="nm">' + esc(d.name) + '<small>' + esc(d.gu) + '</small></span><span class="v">' + mName(d.tm.t) + (d.tm.rising ? ' ↗' : '') + '</span></li>';
+        '<span class="nm">' + esc(d.name) + '<small>' + esc(d.gu) + '</small></span><span class="v">' + mName(d.tm.t) + (d.tm.early ? ' 이전' : '') + (d.tm.rising ? ' ↗' : '') + '</span></li>';
     };
     $('r1t').innerHTML = '먼저 달아오른 동<small>거래 열기가 시작된 곳</small>';
     $('r1').innerHTML = early.slice(0, 10).map(li).join('') || '<li>해당 없음</li>';
@@ -383,7 +384,7 @@
       var mx = Math.max.apply(null, r.tm.s.concat([1]));
       h += '<div class="hl" data-gu="' + esc(r.gu || '') + '" data-key="' + esc(r.key || '') + '">' + esc(r.label) + '</div>' +
         r.tm.s.map(function (v, i) { return '<div class="c' + (i === r.tm.t ? ' t' : '') + '" style="background:' + heatColor(v / mx) + '" title="' + esc(r.label) + ' ' + mName(i) + ' ' + v + '건"></div>'; }).join('') +
-        '<div class="hr">' + Number(MONTHS[r.tm.t].slice(5)) + '월' + (r.tm.rising ? '↗' : '') + '</div>';
+        '<div class="hr">' + (r.tm.early ? '~' : '') + Number(MONTHS[r.tm.t].slice(5)) + '월' + (r.tm.rising ? '↗' : '') + '</div>';
     });
     var hEl = $('heat'); hEl.style.gridTemplateColumns = '64px repeat(' + n + ', minmax(0,1fr)) 40px'; hEl.innerHTML = rows.length ? h : '<div class="msg">거래가 적어 흐름을 계산할 수 없어요</div>';
     // 요약 문장
@@ -394,7 +395,7 @@
       var homeLine = '';
       var hci = D.c.findIndex(function (c) { return c[0] === HOME; });
       if (hci >= 0 && !gu) { var hr = rows.filter(function (r) { return r.gu === D.c[hci][2]; })[0]; if (hr) homeLine = '<br>우리 집이 있는 <b>' + esc(hr.gu) + '</b>는 ' + mName(hr.tm.t) + ' (' + (rows.indexOf(hr) + 1) + '/' + rows.length + '번째).'; }
-      $('waveSum').innerHTML = '가장 먼저 <b>' + first.map(esc).join('·') + '</b> (' + mName(rows[0].tm.t) + ') → 마지막 <b>' + lastR.map(esc).join('·') + '</b> (' + mName(lastT) + ').' +
+      $('waveSum').innerHTML = '가장 먼저 <b>' + first.map(esc).join('·') + '</b> (' + mName(rows[0].tm.t) + (rows[0].tm.early ? ' 또는 그 이전' : '') + ') → 마지막 <b>' + lastR.map(esc).join('·') + '</b> (' + mName(lastT) + ').' +
         (rising.length ? '<br>아직 오르는 중: ' + rising.slice(0, 6).map(esc).join('·') : '') + homeLine;
     } else $('waveSum').innerHTML = '';
   }
